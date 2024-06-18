@@ -1,0 +1,4 @@
+instagrapi
+moviepy
+requests
+python-dotenv
