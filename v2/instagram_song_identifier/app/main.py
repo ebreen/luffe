@@ -2,7 +2,7 @@
 import os
 import logging
 from dotenv import load_dotenv
-from app.instagram_api import login_to_instagram, get_direct_messages, download_reel, send_direct_message
+from app.instagram_api import login_to_instagram, get_direct_messages, download_reel, send_direct_message, get_pending_requests, accept_request
 from app.media_processing import extract_audio_from_video
 from app.music_recognition import recognize_song
 from app.logger import setup_logger
@@ -20,10 +20,18 @@ def main():
     logger.info("Logging into Instagram...")
     client = login_to_instagram(username, password)
 
+    logger.info("Checking for pending requests...")
+    pending_requests = get_pending_requests(client)
+    for request, user_id in pending_requests:
+        logger.info(f"Accepting request from user {user_id}...")
+        accept_request(client, request.id)  # Use request.id instead of request.thread_id
+
     logger.info("Fetching direct messages...")
     messages = get_direct_messages(client)
 
-    latest_message = sorted(messages, key=lambda x: x.timestamp, reverse=True)[0]
+    # Filter out the acceptance messages and get the latest relevant message
+    relevant_messages = [msg for msg in messages if not (msg.text and "Your request has been accepted" in msg.text)]
+    latest_message = sorted(relevant_messages, key=lambda x: x.timestamp, reverse=True)[0]
 
     if latest_message.clip and latest_message.clip.media_type == 2:  # 2 corresponds to video
         reel_url = latest_message.clip.video_url

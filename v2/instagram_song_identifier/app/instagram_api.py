@@ -25,3 +25,16 @@ def download_reel(client, reel_url):
 
 def send_direct_message(client, user_id, message):
     client.direct_send(message, user_ids=[user_id])
+
+def get_pending_requests(client):
+    pending_requests = []
+    for thread in client.direct_pending_inbox():
+        for user in thread.users:
+            pending_requests.append((thread, user.pk))  # Store the thread and user_id as a tuple
+    return pending_requests
+
+def accept_request(client, thread_id):
+    # Simulate approval by marking the thread as read or sending a message
+    client.direct_thread_mark_unread(thread_id)
+    # Send a message to the thread to simulate acceptance
+    client.direct_send('Your request has been accepted!', thread_ids=[thread_id])
