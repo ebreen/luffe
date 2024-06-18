@@ -14,5 +14,20 @@ def recognize_song(audio_path, api_token):
     files = {
         'file': open(audio_path, 'rb')
     }
-    response = requests.post(url, data=data, files=files)
-    return response.json()
+    try:
+        response = requests.post(url, data=data, files=files)
+        response.raise_for_status()  # Raise an HTTPError for bad responses (4xx and 5xx)
+        result = response.json()
+        logger.debug(f"API response: {result}")  # Log the entire API response for debugging
+        if result.get('status') == 'success':
+            if result.get('result') is not None:
+                return result
+            else:
+                logger.info("No song recognized in the audio file.")
+                return {'status': 'success', 'result': None, 'message': "Could not identify song in reel"}
+        else:
+            logger.error(f"Song recognition failed: {result.get('error', 'Unknown error')}")
+            return None
+    except requests.exceptions.RequestException as e:
+        logger.error(f"API request failed: {e}")
+        return None
