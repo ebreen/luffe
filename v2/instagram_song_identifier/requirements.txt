@@ -2,3 +2,6 @@ instagrapi
 moviepy
 requests
 python-dotenv
+websockets
+influxdb
+influxdb-client

@@ -1,12 +1,16 @@
 import sqlite3
 from contextlib import contextmanager
+from datetime import datetime
+import pytz
 
 DATABASE_NAME = "luffe.db"
-CURRENT_DB_VERSION = 2  # Increment this when making schema changes
+CURRENT_DB_VERSION = 3  # Incremented for new schema changes
+PARIS_TZ = pytz.timezone('Europe/Paris')
 
 @contextmanager
 def get_db_connection():
     conn = sqlite3.connect(DATABASE_NAME)
+    conn.row_factory = sqlite3.Row
     try:
         yield conn
     finally:
@@ -44,7 +48,9 @@ def initialize_db():
             id INTEGER PRIMARY KEY,
             instagram_id TEXT UNIQUE,
             username TEXT,
-            last_interaction TIMESTAMP
+            first_interaction TIMESTAMP,
+            last_interaction TIMESTAMP,
+            total_interactions INTEGER DEFAULT 0
         )
         ''')
         
@@ -92,16 +98,65 @@ def perform_migrations(cursor, from_version):
             FOREIGN KEY (song_id) REFERENCES songs (id)
         )
         ''')
+    if from_version < 3:
+        # Migration to version 3: Update users table
+        cursor.execute('''
+        ALTER TABLE users ADD COLUMN first_interaction TIMESTAMP
+        ''')
+        cursor.execute('''
+        ALTER TABLE users ADD COLUMN total_interactions INTEGER DEFAULT 0
+        ''')
+        # Set first_interaction to last_interaction for existing users
+        cursor.execute('''
+        UPDATE users SET first_interaction = last_interaction WHERE first_interaction IS NULL
+        ''')
     # Add more migration steps here for future versions
-        
-        conn.commit()
 
 def add_user(instagram_id, username):
+    current_time = datetime.now(PARIS_TZ)
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('INSERT OR REPLACE INTO users (instagram_id, username, last_interaction) VALUES (?, ?, CURRENT_TIMESTAMP)', (instagram_id, username))
+        cursor.execute('''
+        INSERT OR REPLACE INTO users 
+        (instagram_id, username, first_interaction, last_interaction, total_interactions)
+        VALUES (?, ?, 
+                COALESCE((SELECT first_interaction FROM users WHERE instagram_id = ?), ?),
+                ?,
+                COALESCE((SELECT total_interactions FROM users WHERE instagram_id = ?), 0) + 1
+        )
+        ''', (instagram_id, username, instagram_id, current_time, current_time, instagram_id))
         conn.commit()
-        return cursor.lastrowid
+        user_id = cursor.lastrowid
+        return {
+            'id': user_id,
+            'instagram_id': instagram_id,
+            'username': username,
+            'first_interaction': current_time,
+            'last_interaction': current_time,
+            'total_interactions': 1
+        }
+
+def update_user(instagram_id, username):
+    current_time = datetime.now(PARIS_TZ)
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+        UPDATE users SET 
+            username = ?,
+            last_interaction = ?,
+            total_interactions = total_interactions + 1
+        WHERE instagram_id = ?
+        ''', (username, current_time, instagram_id))
+        conn.commit()
+
+def get_user(instagram_id):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM users WHERE instagram_id = ?', (instagram_id,))
+        user = cursor.fetchone()
+        if user:
+            return dict(user)
+        return None
 
 def add_song(title, artist, album, release_date, spotify_link):
     with get_db_connection() as conn:
@@ -112,10 +167,11 @@ def add_song(title, artist, album, release_date, spotify_link):
         return cursor.lastrowid
 
 def add_user_song(user_id, song_id):
+    current_time = datetime.now(PARIS_TZ)
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('INSERT INTO user_songs (user_id, song_id, request_time) VALUES (?, ?, CURRENT_TIMESTAMP)', 
-                       (user_id, song_id))
+        cursor.execute('INSERT INTO user_songs (user_id, song_id, request_time) VALUES (?, ?, ?)', 
+                       (user_id, song_id, current_time))
         conn.commit()
 
 def get_user_song_history(instagram_id):
@@ -144,8 +200,9 @@ def get_cached_song(reel_id):
         return cursor.fetchone()
 
 def cache_reel_song(reel_id, song_id):
+    current_time = datetime.now(PARIS_TZ)
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('INSERT OR REPLACE INTO reel_cache (reel_id, song_id, cache_time) VALUES (?, ?, CURRENT_TIMESTAMP)', 
-                       (reel_id, song_id))
+        cursor.execute('INSERT OR REPLACE INTO reel_cache (reel_id, song_id, cache_time) VALUES (?, ?, ?)', 
+                       (reel_id, song_id, current_time))
         conn.commit()
