@@ -123,25 +123,10 @@ def process_message(client, api_token, logger, message):
                 
                 add_user_song(db_user_id, db_song_id)
                 
-                # Add user info to the formatted result
-                user_info = f"""
-----------------------------
-👤 *Your Info:*
-Total Identifications: {user['total_interactions']}
-First Used: {user['first_interaction']}
-
-Thank you for using our Song Identifier! 🎉
-"""
-                complete_message = formatted_result + user_info
-                
-                logger.info(f"Sending result and user info back to user {user['username']}...")
-                send_direct_message(client, user_id, complete_message)
-                logger.info("Result and user info sent successfully.")
-            elif result is not None and result.get('message') is not None:
-                user_id = message.user_id
-                logger.info(f"Sending message to user {user_id}...")
-                send_direct_message(client, user_id, result['message'])
-                logger.info("Message sent successfully.")
+                formatted_result = format_song_info(result)
+                logger.info(f"Sending result to user {user['username']}...")
+                send_direct_message(client, user_id, formatted_result)
+                logger.info("Result sent successfully.")
             else:
                 logger.info("No song recognized, skipping message processing.")
     except Exception as e:
